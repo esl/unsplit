@@ -149,9 +149,18 @@ stitch_together(NodeA, NodeB) ->
     end.
 
 do_stitch_together(NodeA, NodeB) ->
-    [IslandA, IslandB] =
-        [rpc:call(N, mnesia, system_info, [running_db_nodes]) ||
-            N <- [NodeA, NodeB]],
+    case rpc:multicall([NodeA, NodeB],
+                       mnesia, system_info, [running_db_nodes]) of
+        {[IslandA, IslandB], []} ->
+            do_stitch_together(NodeB, IslandA, IslandB);
+        _Other ->
+            %% An rpc:call/4 failed, most probably because NodeB is
+            %% not alive. Assume we will get a new event once it's
+            %% back online. The work for now is done.
+            ok
+    end.
+
+do_stitch_together(NodeB, IslandA, IslandB) ->
     io:fwrite("IslandA = ~p;~nIslandB = ~p~n", [IslandA, IslandB]),
     TabsAndNodes = affected_tables(IslandA, IslandB),
     Tabs = [T || {T,_} <- TabsAndNodes],
